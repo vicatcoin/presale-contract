@@ -1,0 +1,130 @@
+pragma soliditypp ^0.4.3;
+import "./SafeMathBasic.solpp";
+ 
+contract PreSale {
+    using SafeMathBasic for uint;
+
+    // token parameters
+    tokenId constant VITE_ID = tokenId("tti_5649544520544f4b454e6e40");
+    tokenId constant VICAT_ID = tokenId("tti_b3fbb46b9318b3d168ba904e"); //MAINNET
+ 
+    // events
+    event Dispensed(address addr, uint amount_vite, uint amount_vicat);
+    event Funded(address addr, uint amount);
+ 
+    // variables
+    address owner;
+    uint totalFund;
+    uint paidVite;
+    uint paidVicat;
+    uint preSalePrice;
+    uint preSaleActive;
+    uint minVite;
+    uint maxVite;
+
+    mapping(address => uint) public soldVite;
+ 
+    constructor() public {
+         owner = msg.sender;
+         preSalePrice = 40000; // 0.000025 = 40000
+         minVite = 1000000000000000000;
+         maxVite = 15000000000000000000000; //15000
+         preSaleActive = 0;
+    }
+
+    // internal functions   
+    function _fund() private {
+        // only allow funding of VICAT, reimburse other tokens.
+        require(msg.tokenid == VICAT_ID);
+        totalFund += msg.amount;
+        emit Funded(msg.sender, msg.amount);
+    }
+ 
+    function _dispense(address addr) private {
+        // only dispense if user sends VITE.
+        require(msg.tokenid == VITE_ID);
+        uint am;
+        
+        // Amount of VICAT to be dispensed
+        uint num7 = msg.amount.mul(preSalePrice);
+        am = num7.div(100000000000);
+
+        // True if to be dispensed amount is smaller than vicat balance
+        if (am <= balance(VICAT_ID)) {
+            // Paid VITE 
+            msg.sender.transfer(VICAT_ID, am);
+
+            paidVite = paidVite.add(msg.amount);
+            paidVicat = paidVicat.add(am);
+            totalFund = totalFund.sub(am);
+            soldVite[msg.sender] = soldVite[msg.sender].add(msg.amount);
+        } else {
+            //msg.sender.transfer(VITE_ID, msg.amount);
+            revert("Unsupported token.");
+        }
+        emit Dispensed(msg.sender, msg.amount, am);
+    }
+ 
+    // public owner interface
+    onMessage setPrice(uint newPrice) {
+        require(msg.sender == owner && newPrice > 0);
+        preSalePrice = newPrice;
+    }
+
+    onMessage setMinVite(uint newMinVite) {
+        require(msg.sender == owner && newMinVite > 0 && newMinVite < maxVite);
+        minVite = newMinVite;
+    }
+
+    onMessage setMaxVite(uint newMaxVite) {
+        require(msg.sender == owner && newMaxVite > 0 && newMaxVite > minVite);
+        maxVite = newMaxVite;
+    }
+
+    onMessage sendBalance(tokenId token) {
+        require(msg.sender == owner && balance(token) > 0);
+        if (token == VICAT_ID) {
+            totalFund = 0;
+        }
+        owner.transfer(token, balance(token));
+    }
+
+    onMessage setActive(uint state) {
+        require(msg.sender == owner && (state == 0 || state == 1));
+        preSaleActive = state;
+    }
+
+    onMessage resetNumbers() {
+        require(msg.sender == owner);
+        paidVite = 0;
+        paidVicat = 0;
+    }
+
+    onMessage() payable {
+        if (msg.tokenid == VICAT_ID) {
+            // all VICAT sent to the contract are locked in the presale as funding.
+            _fund();
+        } else if(msg.tokenid == VITE_ID){
+            require(msg.amount >= minVite && msg.amount <= maxVite && preSaleActive == 1);
+            require(soldVite[msg.sender].add(msg.amount) <= maxVite);
+            _dispense(msg.sender);
+        } else {
+            // any other token sent to the contract are automatically reimbursed.
+            revert("Unsupported token.");
+        }
+    }
+    
+    // getters
+    getter getAmountFor(uint invest) returns(uint getAmount) {
+        uint num7 = invest.mul(preSalePrice);
+        return num7.div(100000000000);
+    }
+
+    getter getViteFor(address addr) returns(uint getVite) {
+        return soldVite[addr];
+    }
+ 
+    getter getPreSaleDetails() returns (uint _totalFund, uint _preSalePrice, uint _minVite, uint _maxVite, uint _paidVite, uint _paidVicat, uint _preSaleActive) {
+         return (totalFund, preSalePrice, minVite, maxVite, paidVite, paidVicat, preSaleActive);
+    }   
+}

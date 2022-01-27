@@ -1,1 +1,1 @@
-# presale-contract
+# ViCat PreSale Contract
